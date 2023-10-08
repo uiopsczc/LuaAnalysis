@@ -1,16 +1,38 @@
 -- 代码性能监控
 local Profiler = {}--class("Profiler")
 
-local filePath = "d:/Profiler.txt"
+local filePath = "d:/ProfilerLogs/Profiler.txt"
+local batchFilePathFormat = "d:/ProfilerLogs/Profiler_%s.txt" --批量日志
 -- start profiling
 
 function Profiler:Init()
+end
+
+function Profiler:SetIsBatch(isBatch)
+  self._isBatch = isBatch
+end
+
+function Profiler:PreStart(isBatch)
+  -- 创建目录
+  local targetFilePath
+  if not isBatch then
+    targetFilePath = filePath
+  else
+    targetFilePath = batchFilePathFormat
+  end
+  local dir = self:_GetDirOfFilePath(targetFilePath)
+  self:_CreateDirIfNotExist(dir)
+
+  if isBatch then --如果是批量的log，则需要删除目录下的所有文件
+    self:_EmptyDir(dir)
+  end
 end
 
 function Profiler:Start()
   -- 初始化报告
   self._REPORTS           = {}
   self._REPORTS_BY_TITLE  = {}
+
   -- 记录开始时间
   self._STARTIME = os.clock()
   -- 开始hook，注册handler，记录call和return事件
@@ -62,11 +84,20 @@ function Profiler:Stop()
     end
   end
 
-  local mode ="w"
-  local file = io.open(filePath, mode)
+  local mode ="w+"
+
+  local targetFilePath
+  if not self._isBatch then
+    targetFilePath = filePath
+  else
+    targetFilePath = string.format(batchFilePathFormat, Time.frameCount)
+  end
+  local file = io.open(targetFilePath, mode)
   file:write(content)
   file:close()
-  os.execute("explorer file:" .. filePath)
+  if not self._isBatch then
+    os.execute("explorer file:" .. targetFilePath)
+  end
   return self._REPORTS
 end
 
@@ -148,14 +179,69 @@ function Profiler:_FuncReport(funcinfo)
   return report
 end
 
+-------private Util---------
+function Profiler:_LastIndexOfString(content, targetChar)
+  local index = content:match(".*".. targetChar .."()")
+  if index == nil then
+    return nil
+  else
+    return index -1
+  end
+end
+
+
+function Profiler:_GetDirOfFilePath(filePath)
+  local index = self:_LastIndexOfString(filePath, "/")
+  if not index then
+    index = self:_LastIndexOfString(filePath, "\\")
+  end
+  local dir = string.sub(filePath, 1, index)
+  return dir
+end
+
+function Profiler:_CreateDirIfNotExist(dir)
+  local exists = io.open(dir, "r") -- 尝试以只读方式打开目录
+  if exists then -- 目录存在
+    io.close(exists)
+  else -- 目录不存在
+    local dir = string.gsub(dir, "/", "\\")
+    os.execute("mkdir " .. dir)
+  end
+end
+
+function Profiler:_EmptyDir(dir)
+  local dir = string.gsub(dir, "/", "\\")
+  for filePath in io.popen(string.format("dir \"%s\" /b", dir)):lines() do
+    os.remove(dir .. filePath)
+  end
+end
+
 --Test
+----方法1(not batch):
+--profiler = require("Profiler")
+--profiler:PreStart(false)
+--profiler:SetIsBatch(false)
+--profiler:Start()
+
 --if profiler then
 --  profiler:Stop()
 --  profiler = nil
 --end
 
---profiler = require("Profiler")
+----方法2(batch):
+--找个合适的位置（如hotkeyManager的f1按键），做一下batch=true时候的清理文件夹的文件
+--require("common/Profiler"):PreStart(true)
+--找个合适的位置（如hotkeyManager的f2按键），开启batch
+--profiler = require("common/Profiler")
+--profiler:SetIsBatch(true)
 --profiler:Start()
+
+--最后在Update中每帧调用，如hotkeyManager的Update中每帧调用
+--if profiler then
+--  profiler:Stop()
+--  profiler:Start()
+--end
+
 
 return Profiler
 --endregion
