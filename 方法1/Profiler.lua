@@ -2,7 +2,7 @@
 local Profiler = {}--class("Profiler")
 
 local filePath = "d:/ProfilerLogs/Profiler.txt"
-local batchFilePathFormat = "d:/ProfilerLogs/Profiler_%s.txt" --批量日志
+local batchFilePathFormat = "d:/ProfilerLogs/Profiler_%s_%s%s.txt" --批量日志
 -- start profiling
 
 function Profiler:Init()
@@ -62,6 +62,7 @@ function Profiler:Stop()
           "最小用时",
           "函数名")
   content = content .. head .. "\n"
+  local showMaxTime
   for _, report in ipairs(self._REPORTS) do
     -- calculate percent
     while true do
@@ -79,6 +80,9 @@ function Profiler:Stop()
               report.max_time,
               report.min_time,
               report.title)
+      if not showMaxTime or showMaxTime < report.total_time then
+        showMaxTime = report.total_time
+      end
       content = content .. row .. "\n"
       break
     end
@@ -90,7 +94,8 @@ function Profiler:Stop()
   if not self._isBatch then
     targetFilePath = filePath
   else
-    targetFilePath = string.format(batchFilePathFormat, Time.frameCount)
+	local importantTag = (showMaxTime and showMaxTime > 0.05) and "*" or ""
+    targetFilePath = string.format(batchFilePathFormat, Time.frameCount, showMaxTime, importantTag)
   end
   local file = io.open(targetFilePath, mode)
   file:write(content)
